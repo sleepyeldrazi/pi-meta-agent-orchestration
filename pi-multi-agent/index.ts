@@ -932,6 +932,21 @@ Read AGENT.md before starting. When done, write your results to ${agentFile}. La
     };
   });
 
+  // Gently remind the orchestrator about delegation for coding/design tasks
+  pi.on("input", async (event) => {
+    // Only transform actual user prompts (not commands, not empty input)
+    if (!event.text || event.text.startsWith("/") || event.text.trim().length === 0) {
+      return { action: "continue" as const };
+    }
+    
+    // Append a soft reminder about delegation
+    const reminder = "\n\n(Consider using delegate if this involves coding or design work.)";
+    return {
+      action: "transform" as const,
+      text: event.text + reminder
+    };
+  });
+
   // Register commands
   pi.registerCommand("agents", {
     description: "Show configured agents and their providers/models",
