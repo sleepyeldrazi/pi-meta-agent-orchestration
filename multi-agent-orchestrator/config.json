@@ -1,0 +1,7 @@
+{
+  "name": "multi-agent-orchestrator",
+  "version": "2.0.0",
+  "description": "Multi-agent orchestrator with mode selection: pi-only (configurable providers) or cross-harness (Claude + GLM)",
+  "enabled": true,
+  "configFile": "agents.json"
+}

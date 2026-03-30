@@ -1,29 +1,62 @@
 # pi-meta-agent-orchestration
 
-Two complementary pi extensions for multi-agent coding workflows.
+A unified pi extension for multi-agent coding workflows with mode selection.
 
 ## Overview
 
-| Extension | Use Case | How It Works |
-|-----------|----------|--------------|
-| **pi-multi-agent** | Local delegation with pi CLI | Spawns sub-agents using `pi -ne --provider X --model Y` |
-| **cross-agent-orchestrator** | Cross-tool delegation | Calls external agents directly (Claude Code, OpenCode, etc.) |
+Single extension that supports two orchestrator modes:
 
-## pi-multi-agent
+| Mode | Agents | Best For |
+|------|--------|----------|
+| **pi-only** | Spawns sub-agents via `pi` CLI with configurable providers | Using different providers/models per task, isolated worktrees |
+| **cross-harness** | Claude Code (design) + OpenCode/GLM (code) with pi fallback | Leveraging specialized external tools for maximum quality |
 
-Delegates tasks to specialist agents by spawning separate pi processes.
+On first launch, the extension defaults to **pi-only** mode. Switch anytime with `/orchestrator-mode`.
 
-**Best for:**
-- Using different providers/models for different tasks
-- Isolated worktrees per agent
-- Falling back to alternative providers if one fails
+## Installation
 
-**Requirements:**
-- `pi` CLI installed and in PATH
-- API keys configured for your chosen providers
+```bash
+cp -r multi-agent-orchestrator ~/.pi/agent/extensions/
+```
 
-**Configuration:**
-Edit `agents.json` to set providers, models, and prompts:
+Then reload pi with `/reload` or restart.
+
+## Usage
+
+The `delegate` tool is registered for the LLM to use:
+
+```
+delegate { design: "Create a landing page..." }
+delegate { code: "Implement the API..." }
+delegate { design: "...", code: "..." }  // Runs in parallel
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/agents` | Show configured agents, mode, and providers |
+| `/orchestrator-mode` | Switch between pi-only and cross-harness |
+| `/agents-dashboard` | Full TUI dashboard overlay for agent activity |
+| `/reload-agents` | Reload agents.json configuration |
+
+### Post-Delegation Verification
+
+After any `code` delegation, the orchestrator is instructed to:
+1. Run the project's test suite
+2. Run the linter/type-checker
+3. If failures occur, delegate again with the errors to fix them
+4. Repeat until all checks pass
+
+## Configuration
+
+### Mode selection
+
+Mode is persisted in `multi-agent-orchestrator/.mode`. Delete it to get the selection prompt on next launch.
+
+### pi-only mode: agents.json
+
+Edit `agents.json` to set providers, models, and prompts per agent role:
 
 ```json
 {
@@ -46,60 +79,23 @@ Edit `agents.json` to set providers, models, and prompts:
 }
 ```
 
-## cross-agent-orchestrator
+### cross-harness mode
 
-Delegates tasks to external agent tools (Claude Code, OpenCode, etc.).
+Fixed routing:
+- **Design**: Claude Opus (`claude` CLI) → pi fallback
+- **Code**: GLM-5 (`opencode` CLI) → pi fallback
 
-**Best for:**
-- Leveraging specialized tools like Claude Code or OpenCode
-- Workflows requiring specific external agent capabilities
-- SPI mode integration with Claude Code
+Requirements:
+- `claude` CLI installed and authenticated
+- `opencode` CLI installed
 
-**Requirements:**
-- `claude` CLI (for design tasks)
-- `opencode` CLI (for coding tasks with GLM)
-- Or configure fallback to `pi` CLI
+## spi wrapper
 
-**Configuration:**
-Edit `config.json`:
-
-```json
-{
-  "agents": {
-    "claude-design": {
-      "command": "claude",
-      "model": "claude-opus-4"
-    },
-    "opencode-code": {
-      "command": "opencode",
-      "model": "zai-coding-plan/glm-5.1"
-    }
-  }
-}
-```
-
-## Installation
-
-Copy the extension directory to `~/.pi/agent/extensions/`:
+An optional `spi` wrapper is provided for convenience. The mode selection happens inside the extension, so `spi` is just a thin alias:
 
 ```bash
-# For pi-multi-agent
-cp -r pi-multi-agent ~/.pi/agent/extensions/
-
-# For cross-agent-orchestrator
-cp -r cross-agent-orchestrator ~/.pi/agent/extensions/
-```
-
-Then reload pi with `/reload` or restart.
-
-## Usage
-
-Both extensions register a `delegate` tool:
-
-```
-delegate { design: "Create a landing page..." }
-delegate { code: "Implement the API..." }
-delegate { design: "...", code: "..." }  // Runs in parallel
+#!/usr/bin/env bash
+exec pi "$@"
 ```
 
 ## pi-aware Skill
@@ -110,4 +106,4 @@ Install to `~/.pi/agent/skills/pi-aware/`.
 
 ## License
 
-See individual extension LICENSE files.
+Apache License 2.0 — see `multi-agent-orchestrator/LICENSE.txt`.
