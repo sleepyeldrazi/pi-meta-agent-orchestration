@@ -931,7 +931,7 @@ Read AGENT.md before starting. When done, write your results to ${agentFile}. La
       systemPrompt: newPrompt,
       message: {
         customType: "delegate-reminder",
-        content: "Remember: use the `delegate` tool for any coding or design tasks. Coding → `delegate { code: "..." }`, Design → `delegate { design: "..." }`, Both → `delegate { code: "...", design: "..." }`.",
+        content: "Consider using the `delegate` tool if this involves coding or design work.",
         display: false
       }
     };

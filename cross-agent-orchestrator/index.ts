@@ -483,7 +483,7 @@ Rules:
       systemPrompt: event.systemPrompt + SPI_SYSTEM_PROMPT,
       message: {
         customType: "delegate-reminder",
-        content: "Remember: use the `design` and `code` tools for UI and backend tasks. UI → `design { task: "..." }`, Code → `code { task: "..." }`, Both → call both in parallel.",
+        content: "Consider using the `design` or `code` tools if this involves UI or backend work.",
         display: false
       }
     };
