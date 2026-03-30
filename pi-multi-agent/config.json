@@ -1,0 +1,8 @@
+{
+  "name": "pi-multi-agent",
+  "version": "1.0.0",
+  "description": "Multi-agent orchestrator using only pi CLI with configurable providers/models per agent",
+  "enabled": true,
+  "author": "user",
+  "configFile": "agents.json"
+}
