@@ -53,17 +53,18 @@ const SPI_SYSTEM_PROMPT = `
 
 ## Specialist Tools
 
-You have two specialist tools. Use them.
+You have one delegation tool: \`delegate\`.
 
-- \`code\`: for writing, editing, debugging, or refactoring code (backend/logic ONLY)
-- \`design\`: for visual interfaces, UI components, HTML/CSS, TUI, styling
+Fields:
+- \`design\`: UI/visual work — interfaces, TUI, HTML/CSS, React, styling
+- \`code\`: backend logic — algorithms, implementation, debugging, scripts
 
 Rules:
-1. Before calling \`code\` or \`design\`, create AGENT.md with: task description, tech stack, files to modify
-2. Any task involving code (backend/logic) → call \`code\`
-3. Any task involving UI/visual design → call \`design\`
-4. NEVER let \`code\` design UI. It only handles backend/logic.
-5. After \`code\` and/or \`design\` complete: check AGENT.md for remaining work, verify their outputs are compatible
+1. Before calling \`delegate\`, write AGENT.md with: task description, tech stack, files to modify
+2. UI/visual only → \`delegate { design: "..." }\`
+3. Backend/logic only → \`delegate { code: "..." }\`
+4. Both needed → \`delegate { design: "...", code: "..." }\` — they run IN PARALLEL
+5. After delegation: read AGENT.md, verify outputs integrate correctly
 6. Non-code, non-design tasks → handle yourself
 7. Do not write code or design interfaces directly. Delegate.`;
 
@@ -365,28 +366,9 @@ export default function multiAgentOrchestrator(pi: ExtensionAPI) {
     ctx.ui.setStatus("spi-usage", `\x1b[2mC:${c5}%/${cw}% G:${g5}%/${gw}%\x1b[0m`);
   }
 
-  pi.registerTool({
-    name: "design",
-    label: "Design",
-    description: "Creates visual interfaces, UI components, TUI, styling, HTML/CSS, React components, dashboards, landing pages. Use for: web design, React components, HTML/CSS, TUI, styling, any visual/frontend work.",
-    promptSnippet: "Use for visual interfaces, UI components, TUI, styling, HTML/CSS, React components, dashboards, landing pages.",
-    promptGuidelines: [
-      "Use for any visual/frontend work: web design, UI components, TUI, styling, HTML/CSS, React components, dashboards, landing pages.",
-    ],
-    parameters: Type.Object({
-      task: Type.String({ description: "Description of what to design/create" })
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const { task } = params as { task: string };
-      const cwd = process.cwd();
-      
-      let agentMd = "";
-      const agentMdPath = path.join(cwd, "AGENT.md");
-      if (fs.existsSync(agentMdPath)) {
-        agentMd = fs.readFileSync(agentMdPath, "utf-8");
-      }
-      
-      const prompt = `${AGENT_CONTEXT}
+  // Helper to build prompts for each agent type
+  function buildDesignPrompt(task: string, agentMd: string): string {
+    return `${AGENT_CONTEXT}
 
 ${FRONTEND_DESIGN_SKILL}
 
@@ -399,51 +381,10 @@ Task: ${task}
 Read AGENT.md first, then complete the task.
 
 When done, update AGENT.md with what you designed.`;
+  }
 
-      ctx.ui.notify("Running Claude for design...", "info");
-
-      try {
-        const result = await runClaude(prompt, cwd, ctx);
-        ctx.ui.notify("Design complete", "success");
-        return { content: [{ type: "text", text: result }] };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        ctx.ui.notify(`Claude failed: ${msg}. Falling back...`, "warning");
-        try {
-          const result = await runPiFallback(task, cwd, ctx);
-          ctx.ui.notify("Fallback complete", "success");
-          return { content: [{ type: "text", text: result }] };
-        } catch (fallbackErr) {
-          const errMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-          return { content: [{ type: "text", text: `Error: ${errMsg}` }] };
-        }
-      }
-    }
-  });
-
-  pi.registerTool({
-    name: "code",
-    label: "Code",
-    description: "Writes code. Use for: implementation, debugging, refactoring, algorithms, scripts, multi-file projects, any coding work.",
-    promptSnippet: "Use for any coding task: implementation, debugging, refactoring, algorithms, scripts.",
-    promptGuidelines: [
-      "Use for any coding task: implementation, debugging, refactoring, algorithms, scripts, multi-file projects.",
-    ],
-    parameters: Type.Object({
-      task: Type.String({ description: "Description of the coding task" }),
-      files: Type.Optional(Type.String({ description: "Optional: specific files or codebase context" }))
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const { task, files } = params as { task: string; files?: string };
-      const cwd = process.cwd();
-      
-      let agentMd = "";
-      const agentMdPath = path.join(cwd, "AGENT.md");
-      if (fs.existsSync(agentMdPath)) {
-        agentMd = fs.readFileSync(agentMdPath, "utf-8");
-      }
-      
-      const prompt = `${AGENT_CONTEXT}
+  function buildCodePrompt(task: string, agentMd: string, files?: string): string {
+    return `${AGENT_CONTEXT}
 
 ${agentMd ? `Context from AGENT.md:\n${agentMd}\n\n---\n\n` : ""}
 
@@ -454,25 +395,87 @@ Read AGENT.md first, then complete the task.
 Rules:
 - Do NOT touch any UI/TUI/frontend code. Focus on backend/logic only.
 - When done, update AGENT.md with what you implemented.`;
+  }
 
-      ctx.ui.notify("Running GLM for coding...", "info");
+  async function runDesign(task: string, cwd: string, ctx: ExtensionContext): Promise<string> {
+    let agentMd = "";
+    const agentMdPath = path.join(cwd, "AGENT.md");
+    if (fs.existsSync(agentMdPath)) {
+      agentMd = fs.readFileSync(agentMdPath, "utf-8");
+    }
+    const prompt = buildDesignPrompt(task, agentMd);
 
-      try {
-        const result = await runOpencode(prompt, cwd, ctx);
-        ctx.ui.notify("Coding complete", "success");
-        return { content: [{ type: "text", text: result }] };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        ctx.ui.notify(`GLM failed: ${msg}. Falling back...`, "warning");
-        try {
-          const result = await runPiFallback(task, cwd, ctx);
-          ctx.ui.notify("Fallback complete", "success");
-          return { content: [{ type: "text", text: result }] };
-        } catch (fallbackErr) {
-          const errMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-          return { content: [{ type: "text", text: `Error: ${errMsg}` }] };
-        }
+    ctx.ui.notify("Running Claude for design...", "info");
+    try {
+      const result = await runClaude(prompt, cwd, ctx);
+      ctx.ui.notify("Design complete", "success");
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      ctx.ui.notify(`Claude failed: ${msg}. Falling back...`, "warning");
+      return runPiFallback(task, cwd, ctx);
+    }
+  }
+
+  async function runCode(task: string, cwd: string, ctx: ExtensionContext, files?: string): Promise<string> {
+    let agentMd = "";
+    const agentMdPath = path.join(cwd, "AGENT.md");
+    if (fs.existsSync(agentMdPath)) {
+      agentMd = fs.readFileSync(agentMdPath, "utf-8");
+    }
+    const prompt = buildCodePrompt(task, agentMd, files);
+
+    ctx.ui.notify("Running GLM for coding...", "info");
+    try {
+      const result = await runOpencode(prompt, cwd, ctx);
+      ctx.ui.notify("Coding complete", "success");
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      ctx.ui.notify(`GLM failed: ${msg}. Falling back...`, "warning");
+      return runPiFallback(task, cwd, ctx);
+    }
+  }
+
+  // Unified delegate tool - matches pi-multi-agent interface
+  pi.registerTool({
+    name: "delegate",
+    label: "Delegate",
+    description: "Delegate work to specialist agents. Set 'design' for UI/visual work, 'code' for backend/logic. Provide BOTH fields to run them in parallel.",
+    promptSnippet: "design: UI/TUI/CSS/React. code: backend/logic. Both fields = run in parallel.",
+    promptGuidelines: [
+      "design: visual interfaces, UI components, TUI, HTML/CSS, React, styling",
+      "code: backend logic, algorithms, implementation, debugging, scripts",
+      "Provide BOTH fields to run design and code agents simultaneously.",
+    ],
+    parameters: Type.Object({
+      design: Type.Optional(Type.String({ description: "UI/visual task: interfaces, TUI, HTML/CSS, React, styling" })),
+      code: Type.Optional(Type.String({ description: "Code task: backend logic, algorithms, implementation, debugging" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const { design, code } = params as { design?: string; code?: string };
+      const cwd = process.cwd();
+
+      const tasks: Promise<{ role: string; result: string }>[] = [];
+      if (design) {
+        tasks.push(runDesign(design, cwd, ctx).then(result => ({ role: "design", result })));
       }
+      if (code) {
+        tasks.push(runCode(code, cwd, ctx).then(result => ({ role: "code", result })));
+      }
+
+      if (tasks.length === 0) {
+        return { content: [{ type: "text", text: "No tasks provided. Use 'design', 'code', or both fields." }] };
+      }
+
+      const label = tasks.length > 1 ? "both agents in parallel" : (design ? "Claude Design" : "GLM Code");
+      ctx.ui.notify(`Running ${label}...`, "info");
+
+      const results = await Promise.all(tasks);
+      ctx.ui.notify(`${tasks.length > 1 ? "Both agents" : "Agent"} complete`, "success");
+
+      const combined = results.map(r => `### ${r.role}\n${r.result}`).join("\n\n---\n\n");
+      return { content: [{ type: "text", text: combined }] };
     }
   });
 
@@ -483,7 +486,7 @@ Rules:
       systemPrompt: event.systemPrompt + SPI_SYSTEM_PROMPT,
       message: {
         customType: "delegate-reminder",
-        content: "Consider using the `design` or `code` tools if this involves UI or backend work.",
+        content: "Consider using the `delegate` tool if this involves coding or design work.",
         display: false
       }
     };
