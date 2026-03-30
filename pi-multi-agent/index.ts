@@ -908,8 +908,8 @@ Read AGENT.md before starting. When done, write your results to ${agentFile}. La
     }
   });
 
-  // Replace system prompt with custom one from agents.json
-  // Note: when replacing the entire prompt, we need to add date/cwd ourselves
+  // Replace system prompt and inject stealthy delegation reminder
+  // Uses a hidden message (display: false) so user doesn't see it, but LLM receives it
   pi.on("before_agent_start", async (_event) => {
     const addendum = config.orchestrator?.systemPromptAddendum || "";
     const spiPrompt = config.shared.spiSystemPrompt || "";
@@ -928,22 +928,12 @@ Read AGENT.md before starting. When done, write your results to ${agentFile}. La
     const newPrompt = spiPrompt + addendum + `\n\nCurrent date: ${dateStr}\nCurrent working directory: ${cwd}`;
     
     return {
-      systemPrompt: newPrompt
-    };
-  });
-
-  // Gently remind the orchestrator about delegation for coding/design tasks
-  pi.on("input", async (event) => {
-    // Only transform actual user prompts (not commands, not empty input)
-    if (!event.text || event.text.startsWith("/") || event.text.trim().length === 0) {
-      return { action: "continue" as const };
-    }
-    
-    // Append a soft reminder about delegation
-    const reminder = "\n\n(Consider using delegate if this involves coding or design work.)";
-    return {
-      action: "transform" as const,
-      text: event.text + reminder
+      systemPrompt: newPrompt,
+      message: {
+        customType: "delegate-reminder",
+        content: "Remember: use the `delegate` tool for any coding or design tasks. Coding → `delegate { code: "..." }`, Design → `delegate { design: "..." }`, Both → `delegate { code: "...", design: "..." }`.",
+        display: false
+      }
     };
   });
 

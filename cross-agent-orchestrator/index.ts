@@ -476,24 +476,16 @@ Rules:
     }
   });
 
+  // Inject stealthy delegation reminder before each agent turn
+  // Uses a hidden message (display: false) so user doesn't see it, but LLM receives it
   pi.on("before_agent_start", async (event) => {
     return {
-      systemPrompt: event.systemPrompt + SPI_SYSTEM_PROMPT
-    };
-  });
-
-  // Gently remind the orchestrator about delegation for coding/design tasks
-  pi.on("input", async (event) => {
-    // Only transform actual user prompts (not commands, not empty input)
-    if (!event.text || event.text.startsWith("/") || event.text.trim().length === 0) {
-      return { action: "continue" as const };
-    }
-    
-    // Append a soft reminder about delegation
-    const reminder = "\n\n(Consider using delegate if this involves coding or design work.)";
-    return {
-      action: "transform" as const,
-      text: event.text + reminder
+      systemPrompt: event.systemPrompt + SPI_SYSTEM_PROMPT,
+      message: {
+        customType: "delegate-reminder",
+        content: "Remember: use the `design` and `code` tools for UI and backend tasks. UI → `design { task: "..." }`, Code → `code { task: "..." }`, Both → call both in parallel.",
+        display: false
+      }
     };
   });
 
